@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="bn-Latn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squad Arena</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Figtree:wght@400;500;700&display=swap">
+<style>
+/* Layout: one phone-width column; User/Admin switch on top; matches as drop tickets */
+:root{--bg:#edf0ea;--card:#ffffff;--ink:#17211c;--mute:#5a675f;--line:#cfd6cc;--accent:#c2410c;--on:#ffffff;--ok:#0f766e;
+--display:"Chakra Petch",system-ui,sans-serif;--body:"Figtree",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111814;--card:#1a241e;--ink:#e8eee6;--mute:#9cab9f;--line:#324038;--accent:#fb7a3c;--on:#1b0d04;--ok:#4fd1bd;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111814;--card:#1a241e;--ink:#e8eee6;--mute:#9cab9f;--line:#324038;--accent:#fb7a3c;--on:#1b0d04;--ok:#4fd1bd;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+.wrap{max-width:560px;margin:0 auto;padding-block:18px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;overflow-wrap:anywhere}
+h1{font-size:28px}h1 span{color:var(--accent)}h2{font-size:19px}h3{font-size:18px}
+p{margin:0}.mute{color:var(--mute);font-size:13px}
+.seg,.tabs,.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{background:var(--card);border:1px solid var(--line);padding:4px;border-radius:10px}
+.seg button{flex:1;border:0;background:none}
+.tabs button{flex:1;background:none;border:0;border-bottom:3px solid var(--line);border-radius:0}
+button{font:700 14px var(--body);color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:9px 13px;cursor:pointer}
+button.main,.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on)}
+.tabs button[aria-pressed="true"]{border-bottom-color:var(--accent)}
+button:disabled{opacity:.55;cursor:default}
+:focus-visible{outline:3px solid var(--ok);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font:600 12px var(--display);letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--line);padding:2px 7px;border-radius:4px}
+.tag.ok{color:var(--ok);border-color:var(--ok)}
+.bar{height:7px;background:var(--line);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.room{border:2px dashed var(--ok);border-radius:8px;padding:10px;display:flex;gap:18px;flex-wrap:wrap}
+.room b{display:block;font:700 20px var(--display);user-select:all;overflow-wrap:anywhere}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;min-width:0}
+input,select{font:15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:9px;width:100%;min-width:0}
+form{display:flex;flex-direction:column;gap:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}th{font-size:12px;color:var(--mute)}
+th:nth-child(2),td:nth-child(2){text-align:left}
+.res{display:grid;grid-template-columns:minmax(0,1fr) 70px 70px;gap:8px;align-items:end}
+.res span{overflow-wrap:anywhere;padding-bottom:8px}
+#msg{background:var(--ink);color:var(--bg);padding:10px 12px;border-radius:8px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Squad <span>Arena</span></h1>
+    <p class="mute">Free Fire custom room tournament</p>
+  </header>
+  <div id="msg" role="status" hidden></div>
+  <main id="app" style="display:flex;flex-direction:column;gap:14px"><p class="card">Load hocche...</p></main>
+</div>
+<script type="module">
+// ====== EKHANE tomar Firebase config boshao ======
+const firebaseConfig = {
+  apiKey: "AIzaSyAF76F0LJ5ohCSh2JQq4NT2XjvP4r_SwAQ",
+  authDomain: "tournament-3d7b9.firebaseapp.com",
+  projectId: "tournament-3d7b9",
+  appId: "1:955942087038:web:f1c8fddc5781de8be06b2f"
+};
+// =================================================
+
+const app = document.getElementById('app');
+const MODES = ['Solo','Duo','Squad'], MAPS = ['Bermuda','Purgatory','Kalahari','Alpine','NeXTerra'];
+const PLACE = [0,12,9,8,7,6,5,4,3,2,1];
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let timer;
+function say(text) {
+  const m = document.getElementById('msg');
+  m.textContent = text; m.hidden = false;
+  clearTimeout(timer); timer = setTimeout(() => m.hidden = true, 4500);
+  m.scrollIntoView({ block: 'nearest' });
+}
+function fail(e) {
+  console.error(e);
+  say(e && e.code === 'permission-denied'
+    ? 'Permission nei. Slot full hote pare, ba Firestore rules publish kora hoyni.'
+    : 'Kaj ta holo na: ' + ((e && (e.code || e.message)) || 'unknown error'));
+}
+
+if (firebaseConfig.apiKey.startsWith('PASTE')) {
+  app.innerHTML = '<section class="card"><h2>Setup baki ache</h2><p>index.html file-er uporer firebaseConfig-e tomar Firebase project-er config boshao.</p></section>';
+} else {
+  start().catch(e => { fail(e); app.innerHTML = '<p class="card">App load holo na. Internet ar config check kore page reload koro.</p>'; });
+}
+
+async function start() {
+  const V = 'https://www.gstatic.com/firebasejs/10.12.2/';
+  const [{ initializeApp }, A, F] = await Promise.all([
+    import(V + 'firebase-app.js'), import(V + 'firebase-auth.js'), import(V + 'firebase-firestore.js')
+  ]);
+  const fb = initializeApp(firebaseConfig), auth = A.getAuth(fb), db = F.getFirestore(fb);
+  const ref = (...p) => F.doc(db, ...p);
+
+  let user = null, profile = null, isAdmin = false, list = null;
+  let panel = 'user', tab = 'matches', open = null, sure = null, busy = false;
+  let players = {}, rooms = {}, drafts = {};
+  let subs = [], playerSubs = {}, roomSubs = {};
+
+  const T = id => list.find(t => t.id === id);
+  const mine = id => (players[id] || []).find(p => p.id === user.uid);
+  const pad = n => String(n).padStart(2, '0');
+  const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T20:00`; };
+  const fmt = t => new Date(t).toLocaleString('en-IN', { weekday:'short', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' });
+  const points = p => (PLACE[+p.place] || 0) + (+p.kills || 0);
+  const sorted = done => list.filter(t => t.done === done)
+    .sort((a, b) => done ? b.time.localeCompare(a.time) : a.time.localeCompare(b.time));
+
+  // ---------- live data ----------
+  function stopAll() {
+    [...subs, ...Object.values(playerSubs), ...Object.values(roomSubs)].forEach(u => u());
+    subs = []; playerSubs = {}; roomSubs = {}; players = {}; rooms = {};
+    list = null; profile = null; isAdmin = false; panel = 'user'; tab = 'matches'; open = null; drafts = {};
+  }
+  function dropRoom(id) { if (roomSubs[id]) { roomSubs[id](); delete roomSubs[id]; } delete rooms[id]; }
+  function syncSubs() {
+    const live = new Set((list || []).filter(t => !t.done).map(t => t.id));
+    Object.keys(playerSubs).forEach(id => { if (!live.has(id)) { playerSubs[id](); delete playerSubs[id]; delete players[id]; } });
+    // Result edit korar somoy shesh match-er data results theke ashe
+    live.forEach(id => {
+      if (playerSubs[id]) return;
+      playerSubs[id] = F.onSnapshot(F.collection(db, 'tournaments', id, 'players'), { includeMetadataChanges: true }, s => {
+        players[id] = s.docs.map(d => ({ id: d.id, ...d.data(), pending: d.metadata.hasPendingWrites }));
+        syncRooms(); render();
+      }, fail);
+    });
+    syncRooms();
+  }
+  function syncRooms() {
+    (list || []).forEach(t => {
+      const me = mine(t.id);
+      const want = !t.done && (isAdmin || (me && !me.pending));
+      if (!want) return dropRoom(t.id);
+      if (roomSubs[t.id]) return;
+      roomSubs[t.id] = F.onSnapshot(ref('tournaments', t.id, 'private', 'room'),
+        s => { rooms[t.id] = s.data() || null; render(); },
+        () => { delete roomSubs[t.id]; delete rooms[t.id]; render(); });
+    });
+    Object.keys(roomSubs).forEach(id => { if (!T(id)) dropRoom(id); });
+  }
+
+  A.onAuthStateChanged(auth, u => {
+    stopAll(); user = u; render();
+    if (!u) return;
+    subs.push(F.onSnapshot(ref('users', u.uid), s => { profile = s.data() || null; render(); }, fail));
+    subs.push(F.onSnapshot(ref('admins', u.uid), s => { isAdmin = s.exists(); if (!isAdmin) panel = 'user'; syncSubs(); render(); }, fail));
+    subs.push(F.onSnapshot(F.collection(db, 'tournaments'), s => {
+      list = s.docs.map(d => ({ id: d.id, ...d.data() })); syncSubs(); render();
+    }, fail));
+  });
+
+  // ---------- views ----------
+  const btn = (act, id, text, cls = '') => `<button type="button" class="${cls}" data-act="${act}" data-id="${esc(id)}" ${busy ? 'disabled' : ''}>${text}</button>`;
+  const submit = text => `<button class="main" ${busy ? 'disabled' : ''}>${text}</button>`;
+  const input = (id, name, label, value, attrs = '') => `<label>${label}<input id="${esc(id)}" name="${name}" value="${esc(value)}" ${attrs}></label>`;
+  const select = (id, name, label, options, value) => `<label>${label}<select id="${esc(id)}" name="${name}">${options.map(x => `<option ${x === value ? 'selected' : ''}>${x}</option>`).join('')}</select></label>`;
+  const head = t => `<div class="tags"><span class="tag">${esc(t.mode)}</span><span class="tag">${esc(t.map)}</span><span class="tag ${t.done ? '' : 'ok'}">${t.done ? 'Shesh' : t.joined >= t.slots ? 'Full' : 'Open'}</span></div><h3>${esc(t.title)}</h3><p class="mute">${esc(fmt(t.time))}</p><div class="bar"><i style="width:${Math.max(0, Math.min(100, t.joined / t.slots * 100)) || 0}%"></i></div><p class="mute">${esc(t.joined)} / ${esc(t.slots)} slot bhorti</p>`;
+  const table = (cols, rows) => `<div class="scroll"><table><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+
+  function userCard(t) {
+    let body;
+    if (t.done) {
+      const r = [...(t.results || [])].sort((a, b) => points(b) - points(a));
+      body = table(['#','Player','Place','Kill','Point'], r.map((p, i) => [i+1, p.name, p.place, p.kills, points(p)]));
+    } else if (!players[t.id]) body = '<p class="mute">Load hocche...</p>';
+    else if (mine(t.id)) {
+      const r = rooms[t.id];
+      body = (r && r.room ? `<div class="room"><div>Room ID<b>${esc(r.room)}</b></div><div>Password<b>${esc(r.pass || '—')}</b></div></div>`
+        : '<p class="mute">Tumi join korecho. Admin room ID dile ekhane dekhabe.</p>') + btn('leave', t.id, 'Match chhere dao');
+    } else body = t.joined >= t.slots ? '<button disabled>Slot full</button>' : btn('join', t.id, 'Join koro', 'main');
+    return `<article class="card">${head(t)}${body}</article>`;
+  }
+
+  function userView() {
+    let h = `<nav class="tabs">${[['matches','Match'],['board','Leaderboard'],['profile','Profile']].map(([k, n]) => `<button data-act="tab" data-id="${k}" aria-pressed="${tab === k}">${n}</button>`).join('')}</nav>`;
+    if (tab === 'matches') {
+      const a = sorted(false), b = sorted(true);
+      h += a.length ? a.map(userCard).join('') : '<p class="card">Ekhon kono notun match nei.</p>';
+      if (b.length) h += '<h2>Result</h2>' + b.map(userCard).join('');
+    }
+    if (tab === 'board') {
+      const m = {};
+      sorted(true).forEach(t => (t.results || []).forEach(p => {
+        const r = m[p.uid] || (m[p.uid] = { name: p.name, n: 0, k: 0, pt: 0 });
+        r.n++; r.k += +p.kills || 0; r.pt += points(p);
+      }));
+      const r = Object.values(m).sort((a, b) => b.pt - a.pt || b.k - a.k);
+      h += `<section class="card"><h2>Leaderboard</h2>${r.length ? table(['#','Player','Match','Kill','Point'], r.map((p, i) => [i+1, p.name, p.n, p.k, p.pt])) : '<p>Result dile ekhane ranking dekhabe.</p>'}<p class="mute">Point: 1st=12, 2nd=9, 3rd=8, tarpor 7 theke 1 (10th porjonto). Protiti kill=1.</p></section>`;
+    }
+    if (tab === 'profile') h += `<section class="card"><h2>Tomar profile</h2><form data-form="profile" data-id="">${input('p-name','name','Player / team name', profile?.name || '', 'required maxlength="24"')}${input('p-uid','ffUid','Free Fire UID', profile?.ffUid || '', 'required inputmode="numeric" pattern="[0-9]{6,12}" title="6 theke 12 ta number"')}${submit('Save koro')}</form></section>
+      <section class="card"><p class="mute">Login: ${esc(user.email)}</p><p class="mute">Account ID (admin setup-er jonno)</p><b style="user-select:all;overflow-wrap:anywhere">${esc(user.uid)}</b>${btn('logout','','Logout')}</section>`;
+    return h;
+  }
+
+  function matchForm(t) {
+    const v = t || { title:'', mode:'Solo', map:'Bermuda', time: tomorrow(), slots: 48 }, k = 'm-' + (t ? t.id : 'new');
+    return `<form data-form="match" data-id="${t ? esc(t.id) : ''}">${input(k+'-title','title','Match-er naam', v.title, 'required maxlength="50"')}<div class="two">${select(k+'-mode','mode','Mode', MODES, v.mode)}${select(k+'-map','map','Map', MAPS, v.map)}</div>${input(k+'-time','time','Date ar time', v.time, 'type="datetime-local" required')}${input(k+'-slots','slots','Mot slot', v.slots, `type="number" required min="${t ? Math.max(2, t.joined) : 2}" max="52"`)}${submit(t ? 'Change save koro' : 'Match toiri koro')}</form>`;
+  }
+
+  // Result form-er player list: shesh match hole purono result, nahole joined player
+  const roster = t => t.done ? (t.results || [])
+    : (players[t.id] || []).map(p => ({ uid: p.id, name: p.name, ffUid: p.ffUid, place: '', kills: '' }));
+
+  function adminCard(t) {
+    const o = open && open.id === t.id ? open.what : null;
+    let x = '';
+    if (o === 'room') {
+      const r = rooms[t.id];
+      x = r === undefined ? '<p class="mute">Load hocche...</p>' : `<form data-form="room" data-id="${esc(t.id)}"><div class="two">${input('r-'+t.id,'room','Room ID', r?.room || '', 'required maxlength="20"')}${input('rp-'+t.id,'pass','Password', r?.pass || '', 'maxlength="20"')}</div>${submit('Room details pathao')}</form>`;
+    }
+    if (o === 'players') {
+      const p = roster(t);
+      x = p.length ? p.map(p => `<div class="row" style="justify-content:space-between"><span>${esc(p.name)}<br><span class="mute">UID ${esc(p.ffUid)}</span></span>${t.done ? '' : btn('kick', t.id + '|' + p.uid, 'Remove')}</div>`).join('') : '<p class="mute">Ekhono keu join koreni.</p>';
+    }
+    if (o === 'result') {
+      const p = roster(t);
+      x = p.length ? `<form data-form="result" data-id="${esc(t.id)}">${p.map(p => `<div class="res"><span>${esc(p.name)}</span>${input(`pl-${t.id}-${p.uid}`, 'place-' + p.uid, 'Place', p.place, 'type="number" required min="1" max="52"')}${input(`kl-${t.id}-${p.uid}`, 'kills-' + p.uid, 'Kill', p.kills, 'type="number" min="0" max="60"')}</div>`).join('')}${submit('Result publish koro')}</form>` : '<p class="mute">Player join korle result dite parbe.</p>';
+    }
+    if (o === 'edit') x = matchForm(t);
+    const tog = (w, n) => btn('open', t.id + '|' + w, n, o === w ? 'main' : '');
+    return `<article class="card">${head(t)}<div class="row">${tog('players','Player')}${t.done ? '' : tog('room','Room ID')}${tog('result','Result')}${tog('edit','Edit')}${btn('del', t.id, sure === t.id ? 'Sotti delete?' : 'Delete')}</div>${x}</article>`;
+  }
+
+  // Live update ashle-o likhte thaka form-er lekha ar cursor thik rakhe
+  function render() {
+    const focus = document.activeElement?.id;
+    let h;
+    if (!user) h = `<section class="card"><h2>Login koro</h2><p>Match join korte Google account diye login koro.</p><button class="main" data-act="login" data-id="">Google diye login</button><p class="mute">WhatsApp ba Instagram-er bhitore login na hole link ta Chrome-e kholo.</p></section>`;
+    else if (!list) h = '<p class="card">Load hocche...</p>';
+    else {
+      h = isAdmin ? `<div class="seg">${['user','admin'].map(k => `<button data-act="panel" data-id="${k}" aria-pressed="${panel === k}">${k === 'user' ? 'User panel' : 'Admin panel'}</button>`).join('')}</div>` : '';
+      if (panel === 'user') h += userView();
+      else {
+        h += open?.what === 'new' ? `<section class="card"><h2>Notun match</h2>${matchForm()}${btn('close','','Bondho koro')}</section>` : btn('new','','+ Notun match','main');
+        h += [...sorted(false), ...sorted(true)].map(adminCard).join('');
+      }
+    }
+    app.innerHTML = h;
+    for (const id in drafts) { const el = document.getElementById(id); if (el) el.value = drafts[id]; }
+    if (focus) document.getElementById(focus)?.focus({ preventScroll: true });
+  }
+  app.addEventListener('input', e => { if (e.target.id) drafts[e.target.id] = e.target.value; });
+
+  // ---------- actions ----------
+  async function run(job, done) {
+    if (busy) return;
+    busy = true; render();
+    try { await job(); if (done) say(done); return true; }
+    catch (e) { fail(e); return false; }
+    finally { busy = false; render(); }
+  }
+  // join-er data ar slot count ek sathe bodlay
+  function removePlayer(tid, uid) {
+    return F.runTransaction(db, async tx => {
+      const p = ref('tournaments', tid, 'players', uid);
+      if (!(await tx.get(p)).exists()) return;
+      tx.delete(p);
+      tx.update(ref('tournaments', tid), { joined: F.increment(-1) });
+    });
+  }
+
+  app.addEventListener('click', async e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act, [id, extra] = b.dataset.id.split('|');
+    if (act !== 'del') sure = null;
+    if (act === 'login') return A.signInWithPopup(auth, new A.GoogleAuthProvider()).catch(fail);
+    if (act === 'logout') return A.signOut(auth).catch(fail);
+    if (act === 'panel') { panel = id; open = null; drafts = {}; }
+    if (act === 'tab') { tab = id; drafts = {}; }
+    if (act === 'new') { open = { what: 'new' }; drafts = {}; }
+    if (act === 'close') { open = null; drafts = {}; }
+    if (act === 'open') { open = open && open.id === id && open.what === extra ? null : { id, what: extra }; drafts = {}; }
+    if (act === 'join') {
+      if (!profile) { tab = 'profile'; say('Age profile-e name ar UID save koro'); }
+      else if ((players[id] || []).some(p => p.ffUid === profile.ffUid)) say('Ei UID diye age theke join kora ache');
+      else return run(() => {
+        const w = F.writeBatch(db);
+        w.set(ref('tournaments', id, 'players', user.uid), { name: profile.name, ffUid: profile.ffUid });
+        w.update(ref('tournaments', id), { joined: F.increment(1) });
+        return w.commit();
+      }, 'Join hoye gelo');
+    }
+    if (act === 'leave') return run(() => removePlayer(id, user.uid), 'Tumi match chhere dile');
+    if (act === 'kick') return run(() => removePlayer(id, extra), 'Player remove holo');
+    if (act === 'del') {
+      if (sure !== id) sure = id;
+      else { sure = null; return run(async () => {
+        const s = await F.getDocs(F.collection(db, 'tournaments', id, 'players'));
+        const w = F.writeBatch(db);
+        s.docs.forEach(d => w.delete(d.ref));
+        w.delete(ref('tournaments', id, 'private', 'room'));
+        w.delete(ref('tournaments', id));
+        await w.commit();
+      }, 'Match delete holo'); }
+    }
+    render();
+  });
+
+  app.addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target, d = Object.fromEntries(new FormData(f)), kind = f.dataset.form, id = f.dataset.id;
+    let job, done;
+    if (kind === 'profile') {
+      const v = { name: d.name.trim(), ffUid: d.ffUid.trim() };
+      if (!v.name) return say('Name likho');
+      job = () => F.setDoc(ref('users', user.uid), v); done = 'Profile save holo';
+    }
+    if (kind === 'match') {
+      const v = { title: d.title.trim(), mode: d.mode, map: d.map, time: d.time, slots: +d.slots };
+      if (!v.title) return say('Match-er naam likho');
+      job = () => id ? F.updateDoc(ref('tournaments', id), v)
+        : F.addDoc(F.collection(db, 'tournaments'), { ...v, joined: 0, done: false });
+      done = id ? 'Change save holo' : 'Match toiri holo';
+    }
+    if (kind === 'room') {
+      job = () => F.setDoc(ref('tournaments', id, 'private', 'room'), { room: d.room.trim(), pass: d.pass.trim() });
+      done = 'Joined player-ra ekhon room details dekhbe';
+    }
+    if (kind === 'result') {
+      const results = roster(T(id)).map(p => ({ uid: p.uid, name: p.name, ffUid: p.ffUid, place: +d['place-' + p.uid], kills: +d['kills-' + p.uid] || 0 }));
+      if (results.some(r => !r.place)) return say('Player list bodleche. Sobar place abar check koro');
+      if (new Set(results.map(r => r.place)).size !== results.length) return say('Dui jon-er same place hote pare na');
+      job = () => F.updateDoc(ref('tournaments', id), { results, done: true }); done = 'Result publish holo';
+    }
+    if (job && await run(job, done)) {
+      drafts = {};
+      if (kind === 'profile') tab = 'matches'; else open = null;
+      render();
+    }
+  });
+}
+</script>
+</body>
+</html>
